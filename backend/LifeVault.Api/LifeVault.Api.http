@@ -1,0 +1,6 @@
+@LifeVault.Api_HostAddress = http://localhost:5127
+
+GET {{LifeVault.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
