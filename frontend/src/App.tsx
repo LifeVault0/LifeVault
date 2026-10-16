@@ -1,46 +1,86 @@
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 
-// Notlarımızın veri yapısı
+// C# Backend adresimiz
+const API_URL = "http://localhost:5127/api/notes"
+
+// Not veri yapısı
 interface Note {
   id: number
   title: string
   content: string
+  createdAt?: string
 }
 
 function App() {
 
-  // Başlangıç notlarımız (örnek veriler)
-  const [notes, setNotes] = useState<Note[]>([
-    {
-      id: 1,
-      title: "İlk notum",
-      content: "LifeVault projemi geliştirmeye başladım!"
-    },
-    {
-      id: 2,
-      title: "React Öğreniyorum",
-      content: "Bugün React ve CSS öğrendim."
-    },
-    {
-      id: 3,
-      title: "TypeScript Çalışıyorum",
-      content: "TypeScript ile veri tiplerini öğreniyorum."
-    }
-  ])
+  // Veritabanından gelen notlar
+  const [notes, setNotes] = useState<Note[]>([])
 
-  // Not oluşturma alanları
+  // Form alanları
   const [newTitle, setNewTitle] = useState("")
   const [newContent, setNewContent] = useState("")
 
-  // Arama kutusuna yazılan metin
+  // Arama ve düzenleme
   const [search, setSearch] = useState("")
+  const [editingId, setEditingId] = useState<number | null>(null)
 
-const [editingId, setEditingId] = useState<number | null>(null)
+  // Yüklenme ve hata durumları
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [error, setError] = useState("")
 
-  // YENİ NOT EKLEME
-  function addNote() {
+  // SAYFA AÇILINCA NOTLARI BACKEND'DEN GETİR
+  useEffect(() => {
+
+    const controller = new AbortController()
+
+    async function loadNotes() {
+      try {
+        setLoading(true)
+        setError("")
+
+        const response = await fetch(API_URL, {
+          signal: controller.signal
+        })
+
+        if (!response.ok) {
+          throw new Error("Notlar getirilemedi.")
+        }
+
+        const data: Note[] = await response.json()
+
+        setNotes(data)
+
+      } catch {
+        if (!controller.signal.aborted) {
+          setError("Notlar yüklenemedi. Backend bağlantısını kontrol et.")
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    loadNotes()
+
+    return () => controller.abort()
+
+  }, [])
+
+  // FORMU TEMİZLE
+  function clearForm() {
+    setNewTitle("")
+    setNewContent("")
+    setEditingId(null)
+  }
+
+  // NOT EKLEME VE GÜNCELLEME
+  async function saveNote() {
+
     const title = newTitle.trim()
     const content = newContent.trim()
 
@@ -54,65 +94,110 @@ const [editingId, setEditingId] = useState<number | null>(null)
       return
     }
 
-if (editingId !== null) {
-  setNotes((previousNotes) =>
-    previousNotes.map((note) =>
-      note.id === editingId
-        ? { ...note, title: title, content: content }
-        : note
-    )
-  )
+    const isEditing = editingId !== null
 
-  setEditingId(null)
-  setNewTitle("")
-  setNewContent("")
-  return
-}
+    const url = isEditing
+      ? `${API_URL}/${editingId}`
+      : API_URL
 
-    const newNote: Note = {
-      id: Date.now(),
-      title: title,
-      content: content
+    try {
+      setSaving(true)
+      setError("")
+
+      const response = await fetch(url, {
+        method: isEditing ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          title: title,
+          content: content
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error("Not kaydedilemedi.")
+      }
+
+      const savedNote: Note = await response.json()
+
+      if (isEditing) {
+
+        // Var olan notu güncelle
+        setNotes((previousNotes) =>
+          previousNotes.map((note) =>
+            note.id === savedNote.id ? savedNote : note
+          )
+        )
+
+      } else {
+
+        // Yeni notu listeye ekle
+        setNotes((previousNotes) => [
+          savedNote,
+          ...previousNotes
+        ])
+
+      }
+
+      clearForm()
+
+    } catch {
+      setError("Not kaydedilemedi. Backend bağlantısını kontrol et.")
+    } finally {
+      setSaving(false)
     }
-
-    setNotes((previousNotes) => [
-      ...previousNotes,
-      newNote
-    ])
-
-    // Formu temizle
-    setNewTitle("")
-    setNewContent("")
   }
 
-  // NOT SİLME
-  function deleteNote(id: number) {
-    setNotes((previousNotes) =>
-      previousNotes.filter((note) => note.id !== id)
-    )
+  // DÜZENLEMEYİ BAŞLAT
+  function prepareEdit(note: Note) {
+    setEditingId(note.id)
+    setNewTitle(note.title)
+    setNewContent(note.content)
   }
 
+  // NOT SİL
+  async function deleteNote(id: number) {
 
-function prepareEdit(note: Note) {
-  setEditingId(note.id)
-  setNewTitle(note.title)
-  setNewContent(note.content)
-}
+    try {
+      setDeletingId(id)
+      setError("")
 
+      const response = await fetch(`${API_URL}/${id}`, {
+        method: "DELETE"
+      })
+
+      if (!response.ok) {
+        throw new Error("Not silinemedi.")
+      }
+
+      setNotes((previousNotes) =>
+        previousNotes.filter((note) => note.id !== id)
+      )
+
+      if (editingId === id) {
+        clearForm()
+      }
+
+    } catch {
+      setError("Not silinemedi. Backend bağlantısını kontrol et.")
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   // NOT ARAMA
   const filteredNotes = notes.filter((note) => {
+
     const searchText = search
       .trim()
       .toLocaleLowerCase("tr-TR")
 
-    const title = note.title.toLocaleLowerCase("tr-TR")
-    const content = note.content.toLocaleLowerCase("tr-TR")
-
     return (
-      title.includes(searchText) ||
-      content.includes(searchText)
+      note.title.toLocaleLowerCase("tr-TR").includes(searchText) ||
+      note.content.toLocaleLowerCase("tr-TR").includes(searchText)
     )
+
   })
 
   return (
@@ -151,19 +236,18 @@ function prepareEdit(note: Note) {
           <p>Kişisel dijital çalışma alanım</p>
         </header>
 
-        {/* TOPLAM NOT SAYISI */}
+        {/* İSTATİSTİK KARTI */}
         <div className="stats-card">
           <h3>Toplam Not</h3>
           <p>{notes.length}</p>
-          <span>Çalışma alanındaki notlar</span>
+          <span>Veritabanındaki toplam notlar</span>
         </div>
 
-        {/* NOT YÖNETİMİ */}
         <section id="notes">
 
           <h2>Notlarım</h2>
 
-          {/* NOT ARAMA */}
+          {/* ARAMA */}
           <div className="search-box">
 
             <label htmlFor="noteSearch">
@@ -175,21 +259,30 @@ function prepareEdit(note: Note) {
               type="search"
               placeholder="Notlarında ara..."
               value={search}
-              onChange={(event) =>
-                setSearch(event.target.value)
-              }
+              onChange={(event) => setSearch(event.target.value)}
             />
 
-            <p className="search-count" role="status">
+            <p className="search-count">
               {filteredNotes.length} not bulundu
             </p>
 
           </div>
 
-          {/* NOT OLUŞTURMA FORMU */}
+          {/* HATA MESAJI */}
+          {error && (
+            <p role="alert" style={{ color: "#be123c" }}>
+              {error}
+            </p>
+          )}
+
+          {/* NOT FORMU */}
           <div className="note-form">
 
-            <h3>Yeni Not Oluştur</h3>
+            <h3>
+              {editingId !== null
+                ? "Not Düzenle"
+                : "Yeni Not Oluştur"}
+            </h3>
 
             <label htmlFor="noteTitle">
               Not Başlığı:
@@ -200,9 +293,7 @@ function prepareEdit(note: Note) {
               type="text"
               placeholder="Not başlığını yaz..."
               value={newTitle}
-              onChange={(event) =>
-                setNewTitle(event.target.value)
-              }
+              onChange={(event) => setNewTitle(event.target.value)}
             />
 
             <label htmlFor="noteContent">
@@ -214,50 +305,48 @@ function prepareEdit(note: Note) {
               rows={5}
               placeholder="Notunu buraya yaz..."
               value={newContent}
-              onChange={(event) =>
-                setNewContent(event.target.value)
-              }
+              onChange={(event) => setNewContent(event.target.value)}
             />
 
-            
-<button
-  type="button"
-  onClick={addNote}
->
-  {editingId !== null
-    ? "Değişiklikleri Kaydet"
-    : "+ Yeni Not Ekle"}
-</button>
+            <button
+              type="button"
+              onClick={saveNote}
+              disabled={saving}
+            >
+              {saving
+                ? "Kaydediliyor..."
+                : editingId !== null
+                  ? "Değişiklikleri Kaydet"
+                  : "+ Yeni Not Ekle"}
+            </button>
 
-{editingId !== null && (
-  <button
-    type="button"
-    className="cancel-button"
-    onClick={() => {
-      setEditingId(null)
-      setNewTitle("")
-      setNewContent("")
-    }}
-  >
-    Vazgeç
-  </button>
-)}
-
+            {editingId !== null && (
+              <button
+                type="button"
+                className="cancel-button"
+                onClick={clearForm}
+              >
+                Vazgeç
+              </button>
+            )}
 
           </div>
 
-          {/* NOTLARIN LİSTESİ */}
+          {/* NOT LİSTESİ */}
           <div className="notes-list">
 
-            {filteredNotes.length === 0 ? (
+            {loading ? (
 
-              <div className="empty-state" role="status">
+              <p>Notlar yükleniyor...</p>
+
+            ) : filteredNotes.length === 0 ? (
+
+              <div className="empty-state">
                 <h3>Not bulunamadı</h3>
-
                 <p>
                   {notes.length === 0
                     ? "Henüz bir not oluşturmadın."
-                    : "Aradığın kelimeyle eşleşen bir not yok."}
+                    : "Aramanla eşleşen not bulunamadı."}
                 </p>
               </div>
 
@@ -274,19 +363,20 @@ function prepareEdit(note: Note) {
 
                   <p>{note.content}</p>
 
-<button
-  type="button"
-  className="edit-button"
-  onClick={() => prepareEdit(note)}
->
-  ✏️ Düzenle
-</button>
+                  <button
+                    type="button"
+                    className="edit-button"
+                    onClick={() => prepareEdit(note)}
+                  >
+                    ✏️ Düzenle
+                  </button>
 
                   <button
                     type="button"
+                    disabled={deletingId === note.id}
                     onClick={() => deleteNote(note.id)}
                   >
-                    Sil
+                    {deletingId === note.id ? "Siliniyor..." : "Sil"}
                   </button>
 
                 </article>
