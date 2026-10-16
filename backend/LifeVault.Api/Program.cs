@@ -1,13 +1,15 @@
 
 using LifeVault.Api.Data;
+using LifeVault.Api.Dtos;
 using LifeVault.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// OpenAPI desteği
 builder.Services.AddOpenApi();
 
-// Frontend ile API arasındaki tarayıcı isteklerine izin ver.
+// Frontend ile backend arasındaki isteklere izin ver.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendPolicy", policy =>
@@ -22,14 +24,13 @@ builder.Services.AddCors(options =>
     });
 });
 
-// PostgreSQL bağlantı ayarını User Secrets üzerinden oku.
+// PostgreSQL bağlantısını yapılandır.
 var connectionString =
     builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException(
         "Veritabani baglanti ayari bulunamadi."
     );
 
-// Veritabanı bağlantısını uygulamaya tanıt.
 builder.Services.AddDbContext<LifeVaultDbContext>(options =>
     options.UseNpgsql(connectionString)
 );
@@ -41,7 +42,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-// CORS politikasını API endpoint'lerinden önce etkinleştir.
+// CORS politikasını etkinleştir.
 app.UseCors("FrontendPolicy");
 
 // API'nin çalıştığını kontrol et.
@@ -100,12 +101,28 @@ app.MapPost(
                 message = "Not basligi bos olamaz."
             });
         }
+        
+        if (request.Title.Length > 150)
+        {
+            return Results.BadRequest(new
+            {
+                message = "Not basligi en fazla 150 karakter olabilir."
+            });
+        }
+
 
         if (string.IsNullOrWhiteSpace(request.Content))
         {
             return Results.BadRequest(new
             {
                 message = "Not icerigi bos olamaz."
+            });
+        }
+        if (request.Content.Length > 10000)
+        {
+            return Results.BadRequest(new
+            {
+                message = "Not icerigi en fazla 10000 karakter olabilir."
             });
         }
 
@@ -151,6 +168,15 @@ app.MapPut(
                 message = "Not icerigi bos olamaz."
             });
         }
+        
+        if (request.Content.Length > 10000)
+        {
+            return Results.BadRequest(new
+            {
+                message = "Not icerigi en fazla 10000 karakter olabilir."
+            });
+        }
+
 
         var note = await db.Notes.FindAsync(id);
 
@@ -198,15 +224,3 @@ app.MapDelete(
 );
 
 app.Run();
-
-// Yeni not oluşturma isteği.
-public record CreateNoteRequest(
-    string Title,
-    string Content
-);
-
-// Not güncelleme isteği.
-public record UpdateNoteRequest(
-    string Title,
-    string Content
-);
