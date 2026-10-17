@@ -402,3 +402,112 @@ button:focus-visible,
 .note-form .cancel-button:hover {
   background-color: #cbd5e1;
 }
+
+/* Sayfa değiştirme butonları */
+.sidebar nav button {
+  display: block;
+  width: 100%;
+  padding: 12px;
+
+  border: none;
+  border-radius: 10px;
+
+  background-color: transparent;
+  color: #dbe4ff;
+
+  text-align: left;
+  font-family: inherit;
+  font-size: 14px;
+
+  cursor: pointer;
+}
+
+.sidebar nav button.active {
+  background-color: #4f46e5;
+  color: white;
+}
+
+.sidebar nav button:hover:not(.active) {
+  background-color: #263656;
+}
+
+@media (max-width: 720px) {
+  .sidebar nav button {
+    white-space: nowrap;
+  }
+}
+
+/* BELGELER SAYFASI */
+
+.documents-page {
+  max-width: 800px;
+}
+
+.documents-page > p {
+  color: #64748b;
+  margin-bottom: 24px;
+}
+
+/* DOSYA SEÇME ALANI */
+
+.document-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  background-color: white;
+  padding: 24px;
+  margin-bottom: 24px;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+
+.document-upload h3 {
+  color: #334155;
+  margin: 0;
+}
+
+.document-upload label {
+  color: #475569;
+  font-weight: 600;
+}
+
+.document-upload input {
+  padding: 12px;
+  border: 1px dashed #a5b4fc;
+  border-radius: 8px;
+  background-color: #f8faff;
+  color: #334155;
+  max-width: 100%;
+}
+
+.document-upload p {
+  color: #64748b;
+  font-size: 13px;
+  margin: 0;
+}
+
+/* SEÇİLEN DOSYA */
+
+.selected-file {
+  background-color: #eef2ff;
+  padding: 20px;
+  margin-bottom: 24px;
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+
+.selected-file h3 {
+  color: #4f46e5;
+  margin-top: 0;
+}
+
+.selected-file p {
+  color: #475569;
+}
+
+.selected-file .upload-warning {
+  color: #9a6700;
+  font-size: 13px;
+}
