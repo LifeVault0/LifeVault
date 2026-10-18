@@ -1,11 +1,9 @@
-
 using LifeVault.Api.Models;
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace LifeVault.Api.Data;
 
-public class LifeVaultDbContext : IdentityDbContext<User>
+public class LifeVaultDbContext : DbContext
 {
     public LifeVaultDbContext(
         DbContextOptions<LifeVaultDbContext> options)
