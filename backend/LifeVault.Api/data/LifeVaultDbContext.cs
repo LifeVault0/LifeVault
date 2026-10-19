@@ -8,10 +8,12 @@ namespace LifeVault.Api.Data;
 public class LifeVaultDbContext : IdentityDbContext<User>
 {
     public LifeVaultDbContext(
-        DbContextOptions<LifeVaultDbContext> options)
-        : base(options)
+        DbContextOptions<LifeVaultDbContext> options
+    ) : base(options)
     {
     }
 
     public DbSet<Note> Notes => Set<Note>();
+
+    public DbSet<Document> Documents => Set<Document>();
 }
