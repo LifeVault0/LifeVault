@@ -1,4 +1,4 @@
-
+using LifeVault.Api.Endpoints;
 using System.Security.Claims;
 using LifeVault.Api.Data;
 using LifeVault.Api.Dtos;
@@ -291,5 +291,5 @@ static NoteResponse ToNoteResponse(Note note)
         note.CreatedAt
     );
 }
-
+app.MapDocumentEndpoints();
 app.Run();
