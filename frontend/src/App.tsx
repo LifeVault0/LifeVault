@@ -2,9 +2,10 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import Documents from './Documents'
+import Auth from './Auth'
 
 // C# Backend adresimiz
-const API_URL = "http://localhost:5127/api/notes"
+const API_URL = 'http://localhost:5127/api/notes'
 
 // Not veri yapısı
 interface Note {
@@ -16,21 +17,28 @@ interface Note {
 
 function App() {
 
+  // KULLANICI KİMLİK DOĞRULAMA
+  const [accessToken, setAccessToken] =
+    useState<string | null>(null)
+
+  const [sessionExpired, setSessionExpired] =
+    useState(false)
+
   // Veritabanından gelen notlar
   const [notes, setNotes] = useState<Note[]>([])
 
   // Not oluşturma formu
-  const [newTitle, setNewTitle] = useState("")
-  const [newContent, setNewContent] = useState("")
+  const [newTitle, setNewTitle] = useState('')
+  const [newContent, setNewContent] = useState('')
 
   // Arama
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = useState('')
 
-  // Hangi sayfanın açık olduğunu tutar
+  // Aktif sayfa
   const [activePage, setActivePage] =
-    useState<"notes" | "documents">("notes")
+    useState<'notes' | 'documents'>('notes')
 
-  // Düzenlenen notun ID'si
+  // Düzenlenen not
   const [editingId, setEditingId] =
     useState<number | null>(null)
 
@@ -41,10 +49,50 @@ function App() {
   const [deletingId, setDeletingId] =
     useState<number | null>(null)
 
-  const [error, setError] = useState("")
+  const [error, setError] = useState('')
 
-  // SAYFA AÇILINCA NOTLARI BACKEND'DEN GETİR
+  // GİRİŞ BAŞARILI OLUNCA
+  function handleLogin(token: string) {
+    setNotes([])
+    setError('')
+    setLoading(true)
+    setSessionExpired(false)
+    setAccessToken(token)
+    setActivePage('notes')
+    clearForm()
+  }
+
+  // ÇIKIŞ YAPMA
+  function handleLogout() {
+    setAccessToken(null)
+    setNotes([])
+    setSearch('')
+    setError('')
+    setLoading(false)
+    setActivePage('notes')
+    setSessionExpired(false)
+    clearForm()
+  }
+
+  // TOKEN GEÇERSİZ OLDUĞUNDA
+  function handleUnauthorized() {
+    handleLogout()
+    setSessionExpired(true)
+  }
+
+  // FORMU TEMİZLE
+  function clearForm() {
+    setNewTitle('')
+    setNewContent('')
+    setEditingId(null)
+  }
+
+  // GİRİŞTEN SONRA NOTLARI BACKEND'DEN GETİR
   useEffect(() => {
+
+    if (!accessToken) {
+      return
+    }
 
     const controller = new AbortController()
 
@@ -52,25 +100,40 @@ function App() {
 
       try {
         setLoading(true)
-        setError("")
+        setError('')
 
         const response = await fetch(API_URL, {
-          signal: controller.signal
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${accessToken}`
+          }
         })
 
+        // Token süresi dolmuş veya geçersiz
+        if (response.status === 401) {
+          if (!controller.signal.aborted) {
+            setAccessToken(null)
+            setNotes([])
+            setSessionExpired(true)
+          }
+          return
+        }
+
         if (!response.ok) {
-          throw new Error("Notlar getirilemedi.")
+          throw new Error('Notlar getirilemedi.')
         }
 
         const data: Note[] = await response.json()
 
-        setNotes(data)
+        if (!controller.signal.aborted) {
+          setNotes(data)
+        }
 
       } catch {
 
         if (!controller.signal.aborted) {
           setError(
-            "Notlar yüklenemedi. Backend bağlantısını kontrol et."
+            'Notlar yüklenemedi. Backend bağlantısını kontrol et.'
           )
         }
 
@@ -87,28 +150,25 @@ function App() {
 
     return () => controller.abort()
 
-  }, [])
-
-  // FORMU TEMİZLE
-  function clearForm() {
-    setNewTitle("")
-    setNewContent("")
-    setEditingId(null)
-  }
+  }, [accessToken])
 
   // NOT EKLEME VE GÜNCELLEME
   async function saveNote() {
 
-    const title = newTitle.trim()
-    const content = newContent.trim()
-
-    if (title === "") {
-      alert("Lütfen bir not başlığı yazın!")
+    if (!accessToken || saving) {
       return
     }
 
-    if (content === "") {
-      alert("Lütfen not içeriğini yazın!")
+    const title = newTitle.trim()
+    const content = newContent.trim()
+
+    if (title === '') {
+      alert('Lütfen bir not başlığı yazın!')
+      return
+    }
+
+    if (content === '') {
+      alert('Lütfen not içeriğini yazın!')
       return
     }
 
@@ -119,23 +179,29 @@ function App() {
       : API_URL
 
     try {
-
       setSaving(true)
-      setError("")
+      setError('')
 
       const response = await fetch(url, {
-        method: isEditing ? "PUT" : "POST",
+        method: isEditing ? 'PUT' : 'POST',
         headers: {
-          "Content-Type": "application/json"
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
         },
         body: JSON.stringify({
-          title: title,
-          content: content
+          title,
+          content
         })
       })
 
+      // Oturum geçersizse giriş sayfasına dön
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
+
       if (!response.ok) {
-        throw new Error("Not kaydedilemedi.")
+        throw new Error('Not kaydedilemedi.')
       }
 
       const savedNote: Note = await response.json()
@@ -153,7 +219,7 @@ function App() {
 
       } else {
 
-        // Yeni notu listeye ekle
+        // Yeni notu ekle
         setNotes((previousNotes) => [
           savedNote,
           ...previousNotes
@@ -164,9 +230,8 @@ function App() {
       clearForm()
 
     } catch {
-
       setError(
-        "Not kaydedilemedi. Backend bağlantısını kontrol et."
+        'Not kaydedilemedi. Backend bağlantısını kontrol et.'
       )
 
     } finally {
@@ -174,31 +239,40 @@ function App() {
     }
   }
 
-  // NOT DÜZENLEMEYİ BAŞLAT
+  // NOT DÜZENLEME
   function prepareEdit(note: Note) {
-
     setEditingId(note.id)
     setNewTitle(note.title)
     setNewContent(note.content)
-
-    // Kullanıcıyı notlar sayfasına götür
-    setActivePage("notes")
+    setActivePage('notes')
   }
 
   // NOT SİLME
   async function deleteNote(id: number) {
 
-    try {
+    if (!accessToken || deletingId !== null) {
+      return
+    }
 
+    try {
       setDeletingId(id)
-      setError("")
+      setError('')
 
       const response = await fetch(`${API_URL}/${id}`, {
-        method: "DELETE"
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
       })
 
+      // Token geçersizse çıkış yap
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
+
       if (!response.ok) {
-        throw new Error("Not silinemedi.")
+        throw new Error('Not silinemedi.')
       }
 
       setNotes((previousNotes) =>
@@ -210,9 +284,8 @@ function App() {
       }
 
     } catch {
-
       setError(
-        "Not silinemedi. Backend bağlantısını kontrol et."
+        'Not silinemedi. Backend bağlantısını kontrol et.'
       )
 
     } finally {
@@ -225,22 +298,50 @@ function App() {
 
     const searchText = search
       .trim()
-      .toLocaleLowerCase("tr-TR")
+      .toLocaleLowerCase('tr-TR')
 
     return (
       note.title
-        .toLocaleLowerCase("tr-TR")
+        .toLocaleLowerCase('tr-TR')
         .includes(searchText) ||
 
       note.content
-        .toLocaleLowerCase("tr-TR")
+        .toLocaleLowerCase('tr-TR')
         .includes(searchText)
     )
-
   })
 
-  return (
+  // GİRİŞ YAPILMADIYSA AUTH SAYFASINI GÖSTER
+  if (!accessToken) {
+    return (
+      <>
+        {sessionExpired && (
+          <p
+            role="alert"
+            style={{
+              position: 'fixed',
+              top: 12,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 10,
+              padding: '12px 18px',
+              backgroundColor: '#fff1f2',
+              color: '#be123c',
+              borderRadius: 10,
+              textAlign: 'center'
+            }}
+          >
+            Oturumun sona erdi. Lütfen tekrar giriş yap.
+          </p>
+        )}
 
+        <Auth onLogin={handleLogin} />
+      </>
+    )
+  }
+
+  // LIFEVAULT ANA UYGULAMA
+  return (
     <div className="app-layout">
 
       {/* SOL MENÜ */}
@@ -255,11 +356,11 @@ function App() {
           <button
             type="button"
             className={
-              activePage === "notes" ? "active" : ""
+              activePage === 'notes' ? 'active' : ''
             }
-            onClick={() => setActivePage("notes")}
+            onClick={() => setActivePage('notes')}
             aria-current={
-              activePage === "notes" ? "page" : undefined
+              activePage === 'notes' ? 'page' : undefined
             }
           >
             📝 Notlar
@@ -268,11 +369,11 @@ function App() {
           <button
             type="button"
             className={
-              activePage === "documents" ? "active" : ""
+              activePage === 'documents' ? 'active' : ''
             }
-            onClick={() => setActivePage("documents")}
+            onClick={() => setActivePage('documents')}
             aria-current={
-              activePage === "documents" ? "page" : undefined
+              activePage === 'documents' ? 'page' : undefined
             }
           >
             📁 Belgeler
@@ -286,6 +387,15 @@ function App() {
             ✨ AI Asistan (Yakında)
           </span>
 
+          {/* ÇIKIŞ BUTONU */}
+          <button
+            type="button"
+            className="logout-button"
+            onClick={handleLogout}
+          >
+            🚪 Çıkış Yap
+          </button>
+
         </nav>
 
         <div className="sidebar-footer">
@@ -297,18 +407,19 @@ function App() {
       {/* ANA İÇERİK */}
       <main>
 
-        {/* HANGİ SAYFA GÖSTERİLECEK? */}
+        {activePage === 'documents' ? (
 
-        {activePage === "documents" ? (
+          
+<Documents
+  accessToken={accessToken}
+  onUnauthorized={handleUnauthorized}
+/>
 
-          // BELGELER SAYFASI
-          <Documents />
 
         ) : (
 
-          // NOTLAR SAYFASI
           <>
-
+            {/* SAYFA BAŞLIĞI */}
             <header className="page-header">
 
               <h1>LifeVault</h1>
@@ -319,12 +430,14 @@ function App() {
 
             </header>
 
-            {/* İSTATİSTİK KARTI */}
+            {/* TOPLAM NOT SAYISI */}
             <div className="stats-card">
 
               <h3>Toplam Not</h3>
 
-              <p>{notes.length}</p>
+              <p>
+                {notes.length}
+              </p>
 
               <span>
                 Veritabanındaki toplam notlar
@@ -361,23 +474,21 @@ function App() {
 
               {/* HATA MESAJI */}
               {error && (
-
                 <p
                   role="alert"
-                  style={{ color: "#be123c" }}
+                  style={{ color: '#be123c' }}
                 >
                   {error}
                 </p>
-
               )}
 
-              {/* NOT OLUŞTURMA FORMU */}
+              {/* NOT FORMU */}
               <div className="note-form">
 
                 <h3>
                   {editingId !== null
-                    ? "Not Düzenle"
-                    : "Yeni Not Oluştur"}
+                    ? 'Not Düzenle'
+                    : 'Yeni Not Oluştur'}
                 </h3>
 
                 <label htmlFor="noteTitle">
@@ -414,14 +525,13 @@ function App() {
                   disabled={saving}
                 >
                   {saving
-                    ? "Kaydediliyor..."
+                    ? 'Kaydediliyor...'
                     : editingId !== null
-                      ? "Değişiklikleri Kaydet"
-                      : "+ Yeni Not Ekle"}
+                      ? 'Değişiklikleri Kaydet'
+                      : '+ Yeni Not Ekle'}
                 </button>
 
                 {editingId !== null && (
-
                   <button
                     type="button"
                     className="cancel-button"
@@ -429,7 +539,6 @@ function App() {
                   >
                     Vazgeç
                   </button>
-
                 )}
 
               </div>
@@ -439,7 +548,9 @@ function App() {
 
                 {loading ? (
 
-                  <p>Notlar yükleniyor...</p>
+                  <p>
+                    Notlar yükleniyor...
+                  </p>
 
                 ) : filteredNotes.length === 0 ? (
 
@@ -449,8 +560,8 @@ function App() {
 
                     <p>
                       {notes.length === 0
-                        ? "Henüz bir not oluşturmadın."
-                        : "Aramanla eşleşen not bulunamadı."}
+                        ? 'Henüz bir not oluşturmadın.'
+                        : 'Aramanla eşleşen not bulunamadı.'}
                     </p>
 
                   </div>
@@ -464,9 +575,13 @@ function App() {
                       key={note.id}
                     >
 
-                      <h3>{note.title}</h3>
+                      <h3>
+                        {note.title}
+                      </h3>
 
-                      <p>{note.content}</p>
+                      <p>
+                        {note.content}
+                      </p>
 
                       <button
                         type="button"
@@ -482,8 +597,8 @@ function App() {
                         onClick={() => deleteNote(note.id)}
                       >
                         {deletingId === note.id
-                          ? "Siliniyor..."
-                          : "Sil"}
+                          ? 'Siliniyor...'
+                          : 'Sil'}
                       </button>
 
                     </article>
@@ -503,7 +618,6 @@ function App() {
       </main>
 
     </div>
-
   )
 }
 
