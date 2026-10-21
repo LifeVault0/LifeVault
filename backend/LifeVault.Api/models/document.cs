@@ -20,6 +20,9 @@ public class Document
     // Dosyanin yuklendigi tarih.
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
 
+    // PDF veya DOCX dosyasindan cikarilan metin.
+    public string? ExtractedText { get; set; }
+
     // Dosyanin sahibi.
     public string UserId { get; set; } = string.Empty;
 
