@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Security.Claims;
 using LifeVault.Api.Data;
 using LifeVault.Api.Models;
+using LifeVault.Api.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ namespace LifeVault.Api.Endpoints;
 public static class DocumentEndpoints
 {
     private const long MaxFileSize = 10 * 1024 * 1024;
+    private const int MaxTextLength = 500_000;
 
     private static string GetStorageFolder()
     {
@@ -39,7 +41,7 @@ public static class DocumentEndpoints
         documentsApi.MapPost("", UploadDocument)
             .DisableAntiforgery();
 
-        // 2. Belge listeleme
+        // 2. Kullaniciya ait belgeleri listeleme
         documentsApi.MapGet("", async Task<IResult> (
             ClaimsPrincipal user,
             LifeVaultDbContext db) =>
@@ -118,7 +120,100 @@ public static class DocumentEndpoints
             );
         });
 
-        // 4. Belge silme
+        
+        // 4. Belgeden metin okuma ve eski belgelerin metnini kaydetme
+        documentsApi.MapGet("/{id:int}/text", async Task<IResult> (
+            int id,
+            ClaimsPrincipal user,
+            LifeVaultDbContext db) =>
+        {
+            var userId = user.FindFirstValue(
+                ClaimTypes.NameIdentifier
+            );
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var document = await db.Documents
+                .FirstOrDefaultAsync(d =>
+                    d.Id == id && d.UserId == userId);
+
+            if (document is null)
+            {
+                return Results.NotFound(new
+                {
+                    message = "Belge bulunamadi."
+                });
+            }
+
+            // Metin daha once kaydedilmisse veritabanindan oku.
+            if (document.ExtractedText is not null)
+            {
+                return Results.Ok(new
+                {
+                    documentId = document.Id,
+                    fileName = document.FileName,
+                    text = document.ExtractedText,
+                    characterCount = document.ExtractedText.Length
+                });
+            }
+
+            var filePath = Path.Combine(
+                GetStorageFolder(),
+                document.StoredFileName
+            );
+
+            if (!File.Exists(filePath))
+            {
+                return Results.NotFound(new
+                {
+                    message = "Belge dosyasi bulunamadi."
+                });
+            }
+
+            try
+            {
+                var extractedText =
+                    DocumentTextExtractor.ExtractText(filePath);
+
+                // Veritabanina kaydedilecek metni sinirla.
+                if (extractedText.Length > MaxTextLength)
+                {
+                    extractedText = extractedText[..MaxTextLength];
+                }
+
+                // Bos metin de kaydedilsin.
+                // Boylece her istekte dosya tekrar okunmaz.
+                document.ExtractedText = extractedText;
+
+                await db.SaveChangesAsync();
+
+                return Results.Ok(new
+                {
+                    documentId = document.Id,
+                    fileName = document.FileName,
+                    text = extractedText,
+                    characterCount = extractedText.Length
+                });
+            }
+            catch (Exception ex) when (
+                ex is IOException ||
+                ex is InvalidDataException ||
+                ex is UnauthorizedAccessException ||
+                ex is NotSupportedException)
+            {
+                return Results.Problem(
+                    title: "Belge okunamadi.",
+                    detail: "Dosya iceriginden metin cikarilamadi.",
+                    statusCode: 422
+                );
+            }
+        });
+
+
+        // 5. Belge silme
         documentsApi.MapDelete("/{id:int}", async Task<IResult> (
             int id,
             ClaimsPrincipal user,
@@ -162,6 +257,7 @@ public static class DocumentEndpoints
         });
     }
 
+    // 6. Belge yukleme ve metnini kaydetme
     private static async Task<IResult> UploadDocument(
         IFormFile file,
         ClaimsPrincipal user,
@@ -221,6 +317,7 @@ public static class DocumentEndpoints
 
         try
         {
+            // Dosyayi sunucuya kaydet.
             await using (var stream = new FileStream(
                 filePath,
                 FileMode.CreateNew))
@@ -228,6 +325,7 @@ public static class DocumentEndpoints
                 await file.CopyToAsync(stream);
             }
 
+            // Temel dosya formati kontrolu
             if (!IsValidDocument(filePath, extension))
             {
                 File.Delete(filePath);
@@ -238,6 +336,35 @@ public static class DocumentEndpoints
                 });
             }
 
+            // Dosyanin icindeki metni otomatik cikar.
+            string? extractedText = null;
+
+            try
+            {
+                var text =
+                    DocumentTextExtractor.ExtractText(filePath);
+
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    extractedText = text.Length > MaxTextLength
+                        ? text[..MaxTextLength]
+                        : text;
+                }
+            }
+            catch (Exception ex) when (
+                ex is IOException ||
+                ex is InvalidDataException ||
+                ex is UnauthorizedAccessException ||
+                ex is NotSupportedException)
+            {
+                // Metin okunamazsa belge yine arsivlenebilir.
+                Console.WriteLine(
+                    $"Belge metni cikarilamadi: {ex.Message}"
+                );
+            }
+
+            // Dosya bilgilerini ve cikarilan metni
+            // PostgreSQL veritabanina kaydet.
             var document = new Document
             {
                 FileName = originalFileName,
@@ -247,6 +374,7 @@ public static class DocumentEndpoints
                     : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 FileSize = file.Length,
                 UploadedAt = DateTime.UtcNow,
+                ExtractedText = extractedText,
                 UserId = userId
             };
 
@@ -277,6 +405,7 @@ public static class DocumentEndpoints
         }
     }
 
+    // 7. Dosya turunu kontrol etme
     private static bool IsValidDocument(
         string filePath,
         string extension)
