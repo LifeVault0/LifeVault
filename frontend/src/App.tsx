@@ -1,4 +1,4 @@
-
+import Reminders from './Reminders'
 import { useEffect, useState } from 'react'
 import './App.css'
 import Documents from './Documents'
@@ -36,7 +36,7 @@ function App() {
 
   // Aktif sayfa
   const [activePage, setActivePage] =
-    useState<'notes' | 'documents'>('notes')
+    useState<'notes' | 'documents' | 'reminders'>('notes')
 
   // Düzenlenen not
   const [editingId, setEditingId] =
@@ -379,9 +379,20 @@ function App() {
             📁 Belgeler
           </button>
 
-          <span>
-            🔔 Hatırlatıcılar (Yakında)
-          </span>
+          
+<button
+  type="button"
+  className={
+    activePage === 'reminders' ? 'active' : ''
+  }
+  onClick={() => setActivePage('reminders')}
+  aria-current={
+    activePage === 'reminders' ? 'page' : undefined
+  }
+>
+  🔔 Hatırlatıcılar
+</button>
+
 
           <span>
             ✨ AI Asistan (Yakında)
@@ -407,18 +418,22 @@ function App() {
       {/* ANA İÇERİK */}
       <main>
 
-        {activePage === 'documents' ? (
 
-          
-<Documents
-  accessToken={accessToken}
-  onUnauthorized={handleUnauthorized}
-/>
+{activePage === 'documents' ? (
 
+  <Documents
+    accessToken={accessToken}
+    onUnauthorized={handleUnauthorized}
+  />
 
-        ) : (
+) : activePage === 'reminders' ? (
 
-          <>
+  <Reminders />
+
+) : (
+
+  <>
+
             {/* SAYFA BAŞLIĞI */}
             <header className="page-header">
 
