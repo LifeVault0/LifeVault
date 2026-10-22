@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import Documents from './Documents'
 import Auth from './Auth'
-
+import AIAssistant from './AIAssistant'
 // C# Backend adresimiz
 const API_URL = 'http://localhost:5127/api/notes'
 
@@ -36,7 +36,9 @@ function App() {
 
   // Aktif sayfa
   const [activePage, setActivePage] =
-    useState<'notes' | 'documents' | 'reminders'>('notes')
+    
+useState<'notes' | 'documents' | 'reminders' | 'ai'>('notes')
+
 
   // Düzenlenen not
   const [editingId, setEditingId] =
@@ -394,9 +396,17 @@ function App() {
 </button>
 
 
-          <span>
-            ✨ AI Asistan (Yakında)
-          </span>
+<button
+  type="button"
+  className={activePage === 'ai' ? 'active' : ''}
+  onClick={() => setActivePage('ai')}
+  aria-current={
+    activePage === 'ai' ? 'page' : undefined
+  }
+>
+  ✨ AI Asistan
+</button>
+
 
           {/* ÇIKIŞ BUTONU */}
           <button
@@ -418,7 +428,7 @@ function App() {
       {/* ANA İÇERİK */}
       <main>
 
-
+  
 {activePage === 'documents' ? (
 
   <Documents
@@ -426,9 +436,14 @@ function App() {
     onUnauthorized={handleUnauthorized}
   />
 
+
 ) : activePage === 'reminders' ? (
 
   <Reminders />
+
+) : activePage === 'ai' ? (
+
+  <AIAssistant />
 
 ) : (
 
