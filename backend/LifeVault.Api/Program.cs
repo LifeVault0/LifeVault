@@ -292,4 +292,5 @@ static NoteResponse ToNoteResponse(Note note)
     );
 }
 app.MapDocumentEndpoints();
+app.MapReminderEndpoints();
 app.Run();
