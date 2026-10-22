@@ -16,4 +16,6 @@ public class LifeVaultDbContext : IdentityDbContext<User>
     public DbSet<Note> Notes => Set<Note>();
 
     public DbSet<Document> Documents => Set<Document>();
+
+    public DbSet<Reminder> Reminders => Set<Reminder>();
 }
