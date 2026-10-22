@@ -605,3 +605,219 @@ button:focus-visible,
 .sidebar nav .logout-button:hover {
   background-color: #5b314c;
 }
+
+/* ====================================
+   LIFEVAULT - HATIRLATICI KARTLARI
+==================================== */
+
+.reminders-page .documents-archive {
+  max-width: 800px;
+  margin-top: 28px;
+}
+
+.reminders-page .document-item {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 20px;
+  margin: 14px 0;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s ease;
+}
+
+.reminders-page .document-item:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.09);
+}
+
+.reminders-page .document-item h4 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 14px;
+}
+
+.reminders-page .document-item p {
+  color: #64748b;
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.reminders-page .document-item button {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #4338ca;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.reminders-page .document-item button:hover {
+  background: #e0e7ff;
+}
+
+.reminders-page .document-item button + button {
+  margin-left: 8px;
+  background: #fff1f2;
+  color: #be123c;
+  border-color: #fecdd3;
+}
+
+.reminders-page .document-item button + button:hover {
+  background: #ffe4e6;
+}
+
+.reminders-page .document-upload button[type="submit"] {
+  background: #4f46e5;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Hatırlatıcı durum renkleri */
+
+.reminders-page .reminder-status {
+  display: inline-block;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.reminders-page .reminder-status.waiting {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.reminders-page .reminder-status.soon {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.reminders-page .reminder-status.overdue {
+  background: #ffe4e6;
+  color: #be123c;
+}
+
+.reminders-page .reminder-status.completed {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+/* HATIRLATICI ISTATISTIK KARTLARI */
+
+.reminder-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  max-width: 800px;
+  margin: 24px 0;
+}
+
+.reminder-stat-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.reminder-stat-card span {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.reminder-stat-card h3 {
+  margin: 12px 0 0;
+  font-size: 30px;
+  color: #1e293b;
+}
+
+@media (max-width: 600px) {
+  .reminder-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* LIFEVAULT - HATIRLATICI FILTRE BUTONLARI */
+
+.reminders-page .reminder-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 22px;
+}
+
+.reminders-page .reminder-filters button {
+  padding: 11px 17px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reminders-page .reminder-filters button:hover {
+  background: #eef2ff;
+  border-color: #a5b4fc;
+  color: #4338ca;
+}
+
+.reminders-page .reminder-filters button.active {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.18);
+}
+
+.reminders-page .reminder-filters button.active:hover {
+  background: #4338ca;
+}
+
+.reminders-page .reminder-filters button:focus-visible {
+  outline: 3px solid #a5b4fc;
+  outline-offset: 2px;
+}
+
+/* LIFEVAULT - HATIRLATICI ARAMA */
+
+.reminders-page .reminder-search {
+  max-width: 800px;
+  margin: 20px 0;
+}
+
+.reminders-page .reminder-search label {
+  display: block;
+  margin-bottom: 10px;
+  color: #334155;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.reminders-page .reminder-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 16px;
+  background: #ffffff;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.reminders-page .reminder-search input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}

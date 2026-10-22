@@ -21,7 +21,12 @@ function Reminders() {
 
   // Hata mesajı
   const [error, setError] = useState('')
-
+  // Hatırlatıcı arama
+const [search, setSearch] = useState('')
+// Hatırlatıcı filtreleme seçeneği
+const [filter, setFilter] = useState<
+  'all' | 'soon' | 'overdue' | 'completed'
+>('all')
   // 1. HATIRLATICI EKLEME
   function handleAddReminder(
     event: FormEvent<HTMLFormElement>
@@ -87,12 +92,100 @@ function Reminders() {
     )
   }
 
+  // HATIRLATICI DURUMUNU HESAPLA
+  function getReminderStatus(reminder: Reminder): string {
+
+    if (reminder.completed) {
+      return '✅ Tamamlandı'
+    }
+
+    const reminderTime = new Date(reminder.dateTime).getTime()
+    const remainingTime = reminderTime - Date.now()
+
+    // Tarih geçtiyse
+    if (remainingTime < 0) {
+      return '🔴 Gecikti'
+    }
+
+    // Son 24 saat kaldıysa
+    if (remainingTime <= 24 * 60 * 60 * 1000) {
+      return '🟠 Yaklaşıyor'
+    }
+
+    return '🔵 Bekliyor'
+  }
+
   // Tarihe göre sıralama
   const sortedReminders = [...reminders].sort(
     (a, b) =>
       new Date(a.dateTime).getTime() -
       new Date(b.dateTime).getTime()
   )
+
+  // HATIRLATICI İSTATİSTİKLERİ
+  const now = Date.now()
+
+  const totalReminders = reminders.length
+
+  const completedReminders = reminders.filter(
+    reminder => reminder.completed
+  ).length
+
+  const upcomingReminders = reminders.filter(
+    reminder => {
+      const time = new Date(reminder.dateTime).getTime()
+
+      return (
+        !reminder.completed &&
+        time >= now &&
+        time - now <= 24 * 60 * 60 * 1000
+      )
+    }
+  ).length
+
+  const overdueReminders = reminders.filter(
+    reminder =>
+      !reminder.completed &&
+      new Date(reminder.dateTime).getTime() < now
+  ).length
+
+  // HATIRLATICILARI SEÇİLEN FİLTREYE GÖRE GÖSTER
+  const searchText = search.trim().toLocaleLowerCase('tr-TR')
+  const filteredReminders = sortedReminders.filter(reminder => {
+
+if (
+  !reminder.title
+    .toLocaleLowerCase('tr-TR')
+    .includes(searchText)
+) {
+  return false
+}
+
+    if (filter === 'all') {
+      return true
+    }
+
+    if (filter === 'completed') {
+      return reminder.completed
+    }
+
+    if (reminder.completed) {
+      return false
+    }
+
+    const reminderTime = new Date(reminder.dateTime).getTime()
+
+    if (filter === 'overdue') {
+      return reminderTime < now
+    }
+
+    if (filter === 'soon') {
+      return reminderTime >= now &&
+        reminderTime - now <= 24 * 60 * 60 * 1000
+    }
+
+    return true
+  })
 
   return (
     <section className="documents-page reminders-page">
@@ -103,6 +196,31 @@ function Reminders() {
         Yapman gereken işleri planla ve
         önemli tarihleri takip et.
       </p>
+
+{/* HATIRLATICI İSTATİSTİKLERİ */}
+<div className="reminder-stats">
+
+  <div className="reminder-stat-card">
+    <span>📋 Toplam Hatırlatıcı</span>
+    <h3>{totalReminders}</h3>
+  </div>
+
+  <div className="reminder-stat-card">
+    <span>⏰ Yaklaşıyor</span>
+    <h3>{upcomingReminders}</h3>
+  </div>
+
+  <div className="reminder-stat-card">
+    <span>🔴 Geciken</span>
+    <h3>{overdueReminders}</h3>
+  </div>
+
+  <div className="reminder-stat-card">
+    <span>✅ Tamamlanan</span>
+    <h3>{completedReminders}</h3>
+  </div>
+
+</div>
 
       {/* YENİ HATIRLATICI FORMU */}
       <form
@@ -175,13 +293,65 @@ function Reminders() {
 
         <h3>📋 Hatırlatıcı Listem</h3>
 
-        {sortedReminders.length === 0 ? (
+{/* HATIRLATICI ARAMA */}
+<div className="reminder-search">
+  <label htmlFor="reminderSearch">
+    🔍 Hatırlatıcı Ara
+  </label>
+
+  <input
+    id="reminderSearch"
+    type="search"
+    placeholder="Hatırlatıcılarında ara..."
+    value={search}
+    onChange={event => setSearch(event.target.value)}
+  />
+</div>
+
+{/* HATIRLATICI FİLTRELERİ */}
+<div className="reminder-filters">
+
+  <button
+    type="button"
+    className={filter === 'all' ? 'active' : ''}
+    onClick={() => setFilter('all')}
+  >
+    📋 Tümü
+  </button>
+
+  <button
+    type="button"
+    className={filter === 'soon' ? 'active' : ''}
+    onClick={() => setFilter('soon')}
+  >
+    ⏰ Yaklaşanlar
+  </button>
+
+  <button
+    type="button"
+    className={filter === 'overdue' ? 'active' : ''}
+    onClick={() => setFilter('overdue')}
+  >
+    🔴 Gecikenler
+  </button>
+
+  <button
+    type="button"
+    className={filter === 'completed' ? 'active' : ''}
+    onClick={() => setFilter('completed')}
+  >
+    ✅ Tamamlananlar
+  </button>
+
+</div>
+
+        {filteredReminders.length === 0 ? (
 
           <p>Henüz hatırlatıcı eklenmedi.</p>
 
         ) : (
 
-          sortedReminders.map(reminder => (
+          filteredReminders.map(reminder => (
 
             <div
               className="document-item"
@@ -205,12 +375,25 @@ function Reminders() {
                   .toLocaleString('tr-TR')}
               </p>
 
-              <p>
-                Durum:{' '}
-                {reminder.completed
-                  ? 'Tamamlandı'
-                  : 'Bekliyor'}
-              </p>
+             
+
+
+<p
+  className={`reminder-status ${
+    reminder.completed
+      ? 'completed'
+      : new Date(reminder.dateTime).getTime() < Date.now()
+        ? 'overdue'
+        : new Date(reminder.dateTime).getTime() - Date.now() <= 86400000
+          ? 'soon'
+          : 'waiting'
+  }`}
+>
+  Durum: {getReminderStatus(reminder)}
+</p>
+
+
+
 
               <button
                 type="button"
