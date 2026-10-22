@@ -72,7 +72,82 @@ public static class DocumentEndpoints
             return Results.Ok(documents);
         });
 
-        // 3. Belge indirme
+        // 3. Belge adi ve iceriginde arama
+        documentsApi.MapGet("/search", async Task<IResult> (
+            string? q,
+            ClaimsPrincipal user,
+            LifeVaultDbContext db) =>
+        {
+            var userId = user.FindFirstValue(
+                ClaimTypes.NameIdentifier
+            );
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            if (string.IsNullOrWhiteSpace(q))
+            {
+                return Results.BadRequest(new
+                {
+                    message = "Arama kelimesi bos olamaz."
+                });
+            }
+
+            var searchText = q.Trim();
+
+            if (searchText.Length > 100)
+            {
+                return Results.BadRequest(new
+                {
+                    message = "Arama en fazla 100 karakter olabilir."
+                });
+            }
+
+            // LIKE ozel karakterlerini etkisiz hale getir.
+            // %, _ ve \ normal metin olarak aransin.
+            var escaped = searchText
+                .Replace("\\", "\\\\")
+                .Replace("%", "\\%")
+                .Replace("_", "\\_");
+
+            var pattern = $"%{escaped}%";
+
+            // Sadece giris yapan kullanicinin belgelerinde ara.
+            var documents = await db.Documents
+                .AsNoTracking()
+                .Where(d => d.UserId == userId)
+                .Where(d =>
+                    EF.Functions.ILike(
+                        d.FileName, pattern, "\\") ||
+                    (
+                        d.ExtractedText != null &&
+                        EF.Functions.ILike(
+                            d.ExtractedText, pattern, "\\")
+                    )
+                )
+                .OrderByDescending(d => d.UploadedAt)
+                .Take(50)
+                .Select(d => new
+                {
+                    d.Id,
+                    d.FileName,
+                    d.ContentType,
+                    d.FileSize,
+                    d.UploadedAt
+                })
+                .ToListAsync();
+
+            return Results.Ok(new
+            {
+                query = searchText,
+                count = documents.Count,
+                results = documents
+            });
+        });
+
+        // 4. Belge indirme
         documentsApi.MapGet("/{id:int}/download", async Task<IResult> (
             int id,
             ClaimsPrincipal user,
@@ -120,8 +195,7 @@ public static class DocumentEndpoints
             );
         });
 
-        
-        // 4. Belgeden metin okuma ve eski belgelerin metnini kaydetme
+        // 5. Belgeden metin okuma ve eski belgelerin metnini kaydetme
         documentsApi.MapGet("/{id:int}/text", async Task<IResult> (
             int id,
             ClaimsPrincipal user,
@@ -212,8 +286,7 @@ public static class DocumentEndpoints
             }
         });
 
-
-        // 5. Belge silme
+        // 6. Belge silme
         documentsApi.MapDelete("/{id:int}", async Task<IResult> (
             int id,
             ClaimsPrincipal user,
@@ -257,7 +330,7 @@ public static class DocumentEndpoints
         });
     }
 
-    // 6. Belge yukleme ve metnini kaydetme
+    // 7. Belge yukleme ve metnini kaydetme
     private static async Task<IResult> UploadDocument(
         IFormFile file,
         ClaimsPrincipal user,
@@ -405,7 +478,7 @@ public static class DocumentEndpoints
         }
     }
 
-    // 7. Dosya turunu kontrol etme
+    // 8. Dosya turunu kontrol etme
     private static bool IsValidDocument(
         string filePath,
         string extension)
