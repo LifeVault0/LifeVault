@@ -18,4 +18,7 @@ public class LifeVaultDbContext : IdentityDbContext<User>
     public DbSet<Document> Documents => Set<Document>();
 
     public DbSet<Reminder> Reminders => Set<Reminder>();
+
+    public DbSet<DocumentChunk> DocumentChunks =>
+        Set<DocumentChunk>();
 }

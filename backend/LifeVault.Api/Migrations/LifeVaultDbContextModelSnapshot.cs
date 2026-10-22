@@ -62,6 +62,31 @@ namespace LifeVault.Api.Migrations
                     b.ToTable("Documents");
                 });
 
+            modelBuilder.Entity("LifeVault.Api.Models.DocumentChunk", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ChunkIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("DocumentId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId");
+
+                    b.ToTable("DocumentChunks");
+                });
+
             modelBuilder.Entity("LifeVault.Api.Models.Note", b =>
                 {
                     b.Property<int>("Id")
@@ -331,6 +356,17 @@ namespace LifeVault.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("LifeVault.Api.Models.DocumentChunk", b =>
+                {
+                    b.HasOne("LifeVault.Api.Models.Document", "Document")
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Document");
                 });
 
             modelBuilder.Entity("LifeVault.Api.Models.Note", b =>
