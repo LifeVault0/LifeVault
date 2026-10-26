@@ -47,13 +47,10 @@ public static class DocumentEndpoints
             LifeVaultDbContext db) =>
         {
             var userId = user.FindFirstValue(
-                ClaimTypes.NameIdentifier
-            );
+                ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userId))
-            {
                 return Results.Unauthorized();
-            }
 
             var documents = await db.Documents
                 .AsNoTracking()
@@ -72,20 +69,86 @@ public static class DocumentEndpoints
             return Results.Ok(documents);
         });
 
-        // 3. Belge indirme
+        // 3. Belge adi ve metninde arama
+        documentsApi.MapGet("/search", async Task<IResult> (
+            string? q,
+            ClaimsPrincipal user,
+            LifeVaultDbContext db) =>
+        {
+            var userId = user.FindFirstValue(
+                ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrEmpty(userId))
+                return Results.Unauthorized();
+
+            if (string.IsNullOrWhiteSpace(q))
+            {
+                return Results.BadRequest(new
+                {
+                    message = "Arama kelimesi bos olamaz."
+                });
+            }
+
+            var searchText = q.Trim();
+
+            if (searchText.Length > 100)
+            {
+                return Results.BadRequest(new
+                {
+                    message = "Arama en fazla 100 karakter olabilir."
+                });
+            }
+
+            var escaped = searchText
+                .Replace("\\", "\\\\")
+                .Replace("%", "\\%")
+                .Replace("_", "\\_");
+
+            var pattern = $"%{escaped}%";
+
+            var documents = await db.Documents
+                .AsNoTracking()
+                .Where(d => d.UserId == userId)
+                .Where(d =>
+                    EF.Functions.ILike(
+                        d.FileName, pattern, "\\") ||
+                    (
+                        d.ExtractedText != null &&
+                        EF.Functions.ILike(
+                            d.ExtractedText, pattern, "\\")
+                    )
+                )
+                .OrderByDescending(d => d.UploadedAt)
+                .Take(50)
+                .Select(d => new
+                {
+                    d.Id,
+                    d.FileName,
+                    d.ContentType,
+                    d.FileSize,
+                    d.UploadedAt
+                })
+                .ToListAsync();
+
+            return Results.Ok(new
+            {
+                query = searchText,
+                count = documents.Count,
+                results = documents
+            });
+        });
+
+        // 4. Belge indirme
         documentsApi.MapGet("/{id:int}/download", async Task<IResult> (
             int id,
             ClaimsPrincipal user,
             LifeVaultDbContext db) =>
         {
             var userId = user.FindFirstValue(
-                ClaimTypes.NameIdentifier
-            );
+                ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userId))
-            {
                 return Results.Unauthorized();
-            }
 
             var document = await db.Documents
                 .AsNoTracking()
@@ -120,21 +183,17 @@ public static class DocumentEndpoints
             );
         });
 
-        
-        // 4. Belgeden metin okuma ve eski belgelerin metnini kaydetme
+        // 5. Belge metnini getir ve parcalari olustur
         documentsApi.MapGet("/{id:int}/text", async Task<IResult> (
             int id,
             ClaimsPrincipal user,
             LifeVaultDbContext db) =>
         {
             var userId = user.FindFirstValue(
-                ClaimTypes.NameIdentifier
-            );
+                ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userId))
-            {
                 return Results.Unauthorized();
-            }
 
             var document = await db.Documents
                 .FirstOrDefaultAsync(d =>
@@ -148,9 +207,12 @@ public static class DocumentEndpoints
                 });
             }
 
-            // Metin daha once kaydedilmisse veritabanindan oku.
+            // Metin daha once kaydedilmisse
+            // eksik chunk'lari olustur.
             if (document.ExtractedText is not null)
             {
+                await EnsureChunksAsync(document, db);
+
                 return Results.Ok(new
                 {
                     documentId = document.Id,
@@ -178,17 +240,18 @@ public static class DocumentEndpoints
                 var extractedText =
                     DocumentTextExtractor.ExtractText(filePath);
 
-                // Veritabanina kaydedilecek metni sinirla.
                 if (extractedText.Length > MaxTextLength)
                 {
-                    extractedText = extractedText[..MaxTextLength];
+                    extractedText =
+                        extractedText[..MaxTextLength];
                 }
 
-                // Bos metin de kaydedilsin.
-                // Boylece her istekte dosya tekrar okunmaz.
                 document.ExtractedText = extractedText;
 
                 await db.SaveChangesAsync();
+
+                // Eski belgenin parcalarini PostgreSQL'e kaydet.
+                await EnsureChunksAsync(document, db);
 
                 return Results.Ok(new
                 {
@@ -212,21 +275,17 @@ public static class DocumentEndpoints
             }
         });
 
-
-        // 5. Belge silme
+        // 6. Belge silme
         documentsApi.MapDelete("/{id:int}", async Task<IResult> (
             int id,
             ClaimsPrincipal user,
             LifeVaultDbContext db) =>
         {
             var userId = user.FindFirstValue(
-                ClaimTypes.NameIdentifier
-            );
+                ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userId))
-            {
                 return Results.Unauthorized();
-            }
 
             var document = await db.Documents
                 .FirstOrDefaultAsync(d =>
@@ -245,7 +304,14 @@ public static class DocumentEndpoints
                 document.StoredFileName
             );
 
+            // Iliskili chunk'lari da sil.
+            var chunks = await db.DocumentChunks
+                .Where(c => c.DocumentId == document.Id)
+                .ToListAsync();
+
+            db.DocumentChunks.RemoveRange(chunks);
             db.Documents.Remove(document);
+
             await db.SaveChangesAsync();
 
             if (File.Exists(filePath))
@@ -257,20 +323,17 @@ public static class DocumentEndpoints
         });
     }
 
-    // 6. Belge yukleme ve metnini kaydetme
+    // 7. Yeni belge yukleme ve metin/parca kaydetme
     private static async Task<IResult> UploadDocument(
         IFormFile file,
         ClaimsPrincipal user,
         LifeVaultDbContext db)
     {
         var userId = user.FindFirstValue(
-            ClaimTypes.NameIdentifier
-        );
+            ClaimTypes.NameIdentifier);
 
         if (string.IsNullOrEmpty(userId))
-        {
             return Results.Unauthorized();
-        }
 
         if (file.Length == 0)
         {
@@ -315,9 +378,11 @@ public static class DocumentEndpoints
             storedFileName
         );
 
+        bool savedToDatabase = false;
+
         try
         {
-            // Dosyayi sunucuya kaydet.
+            // Dosyayi fiziksel olarak kaydet.
             await using (var stream = new FileStream(
                 filePath,
                 FileMode.CreateNew))
@@ -325,7 +390,6 @@ public static class DocumentEndpoints
                 await file.CopyToAsync(stream);
             }
 
-            // Temel dosya formati kontrolu
             if (!IsValidDocument(filePath, extension))
             {
                 File.Delete(filePath);
@@ -336,7 +400,6 @@ public static class DocumentEndpoints
                 });
             }
 
-            // Dosyanin icindeki metni otomatik cikar.
             string? extractedText = null;
 
             try
@@ -357,14 +420,11 @@ public static class DocumentEndpoints
                 ex is UnauthorizedAccessException ||
                 ex is NotSupportedException)
             {
-                // Metin okunamazsa belge yine arsivlenebilir.
                 Console.WriteLine(
-                    $"Belge metni cikarilamadi: {ex.Message}"
+                    $"Metin cikarilamadi: {ex.Message}"
                 );
             }
 
-            // Dosya bilgilerini ve cikarilan metni
-            // PostgreSQL veritabanina kaydet.
             var document = new Document
             {
                 FileName = originalFileName,
@@ -379,8 +439,12 @@ public static class DocumentEndpoints
             };
 
             db.Documents.Add(document);
-
             await db.SaveChangesAsync();
+
+            savedToDatabase = true;
+
+            // Yeni belgenin metnini otomatik parcala.
+            await EnsureChunksAsync(document, db);
 
             return Results.Created(
                 $"/api/documents/{document.Id}",
@@ -396,7 +460,8 @@ public static class DocumentEndpoints
         }
         catch
         {
-            if (File.Exists(filePath))
+            // Veritabanina kaydedilmeyen dosyalari temizle.
+            if (!savedToDatabase && File.Exists(filePath))
             {
                 File.Delete(filePath);
             }
@@ -405,7 +470,45 @@ public static class DocumentEndpoints
         }
     }
 
-    // 7. Dosya turunu kontrol etme
+    // 8. Belgenin chunk'lari yoksa olustur.
+    private static async Task EnsureChunksAsync(
+        Document document,
+        LifeVaultDbContext db)
+    {
+        if (string.IsNullOrWhiteSpace(document.ExtractedText))
+        {
+            return;
+        }
+
+        // Daha once parcalandiysa tekrar olusturma.
+        var hasChunks = await db.DocumentChunks
+            .AnyAsync(c => c.DocumentId == document.Id);
+
+        if (hasChunks)
+        {
+            return;
+        }
+
+        var textParts = DocumentChunkingService.SplitText(
+            document.ExtractedText,
+            chunkSize: 1000,
+            overlap: 150
+        );
+
+        for (int i = 0; i < textParts.Count; i++)
+        {
+            db.DocumentChunks.Add(new DocumentChunk
+            {
+                DocumentId = document.Id,
+                ChunkIndex = i,
+                Content = textParts[i]
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    // 9. Dosya turunu kontrol etme
     private static bool IsValidDocument(
         string filePath,
         string extension)

@@ -291,6 +291,7 @@ static NoteResponse ToNoteResponse(Note note)
         note.CreatedAt
     );
 }
+app.MapDocumentChunkEndpoints();
 app.MapDocumentEndpoints();
 app.MapReminderEndpoints();
 app.Run();
