@@ -1,15 +1,20 @@
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 
 // Hatırlatıcı veri yapısı
 interface Reminder {
-  id: string
+  id: number
   title: string
   dateTime: string
   completed: boolean
 }
 
-function Reminders() {
+interface RemindersProps {
+  accessToken: string
+  onUnauthorized: () => void
+}
+
+function Reminders(_props: RemindersProps) {
 
   // Hatırlatıcı listesi
   const [reminders, setReminders] =
@@ -21,6 +26,51 @@ function Reminders() {
 
   // Hata mesajı
   const [error, setError] = useState('')
+  
+  // Hatırlatıcıları backend'den getir
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadReminders() {
+      try {
+        const response = await fetch(
+          'http://localhost:5127/api/reminders',
+          {
+            headers: {
+              Authorization: `Bearer ${_props.accessToken}`
+            },
+            signal: controller.signal
+          }
+        )
+
+        if (controller.signal.aborted) return
+
+        if (response.status === 401) {
+          _props.onUnauthorized()
+          return
+        }
+
+        if (!response.ok) {
+          throw new Error('Hatırlatıcılar yüklenemedi.')
+        }
+
+        const data: Reminder[] = await response.json()
+
+        if (!controller.signal.aborted) {
+          setReminders(data)
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setError('Hatırlatıcılar yüklenemedi.')
+        }
+      }
+    }
+
+    void loadReminders()
+
+    return () => controller.abort()
+  }, [_props.accessToken, _props.onUnauthorized])
+
   // Hatırlatıcı arama
 const [search, setSearch] = useState('')
 // Hatırlatıcı filtreleme seçeneği
@@ -28,7 +78,9 @@ const [filter, setFilter] = useState<
   'all' | 'soon' | 'overdue' | 'completed'
 >('all')
   // 1. HATIRLATICI EKLEME
-  function handleAddReminder(
+ 
+  // 1. HATIRLATICI EKLEME - POST API
+  async function handleAddReminder(
     event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault()
@@ -39,58 +91,153 @@ const [filter, setFilter] = useState<
       return
     }
 
+    if (title.trim().length > 150) {
+      setError('Başlık en fazla 150 karakter olabilir.')
+      return
+    }
+
     if (!dateTime) {
       setError('Lütfen tarih ve saat seç.')
       return
     }
 
-    const selectedTime = new Date(dateTime).getTime()
+    const selectedDate = new Date(dateTime)
 
     if (
-      Number.isNaN(selectedTime) ||
-      selectedTime <= Date.now()
+      Number.isNaN(selectedDate.getTime()) ||
+      selectedDate.getTime() <= Date.now()
     ) {
       setError('Lütfen gelecekteki bir tarih ve saat seç.')
       return
     }
 
-    const newReminder: Reminder = {
-      id: crypto.randomUUID(),
-      title: title.trim(),
-      dateTime,
-      completed: false
-    }
-
-    setReminders(previous => [
-      ...previous,
-      newReminder
-    ])
-
-    // Formu temizle
-    setTitle('')
-    setDateTime('')
-  }
-
-  // 2. TAMAMLANDI İŞARETLEME
-  function handleToggleReminder(id: string) {
-    setReminders(previous =>
-      previous.map(reminder =>
-        reminder.id === id
-          ? {
-              ...reminder,
-              completed: !reminder.completed
-            }
-          : reminder
+    try {
+      const response = await fetch(
+        'http://localhost:5127/api/reminders',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${_props.accessToken}`
+          },
+          body: JSON.stringify({
+            title: title.trim(),
+            dateTime: selectedDate.toISOString(),
+            completed: false
+          })
+        }
       )
-    )
+
+      if (response.status === 401) {
+        _props.onUnauthorized()
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error('Hatırlatıcı kaydedilemedi.')
+      }
+
+      const newReminder: Reminder = await response.json()
+
+      setReminders(previous => [
+        ...previous,
+        newReminder
+      ])
+
+      setTitle('')
+      setDateTime('')
+
+    } catch {
+      setError(
+        'Hatırlatıcı kaydedilemedi. Backend bağlantısını kontrol et.'
+      )
+    }
   }
+
+
+  // 2. HATIRLATICI TAMAMLAMA - PUT API
+  async function handleToggleReminder(id: number) {
+    const reminder = reminders.find(item => item.id === id)
+
+    if (!reminder) return
+
+    setError('')
+
+    try {
+      const response = await fetch(
+        `http://localhost:5127/api/reminders/${id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${_props.accessToken}`
+          },
+          body: JSON.stringify({
+            title: reminder.title,
+            dateTime: new Date(reminder.dateTime).toISOString(),
+            completed: !reminder.completed
+          })
+        }
+      )
+
+      if (response.status === 401) {
+        _props.onUnauthorized()
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error('Güncelleme başarısız.')
+      }
+
+      const updatedReminder: Reminder = await response.json()
+
+      setReminders(previous =>
+        previous.map(item =>
+          item.id === id ? updatedReminder : item
+        )
+      )
+
+    } catch {
+      setError('Hatırlatıcı güncellenemedi.')
+    }
+  }
+
 
   // 3. HATIRLATICI SİLME
-  function handleDeleteReminder(id: string) {
-    setReminders(previous =>
-      previous.filter(reminder => reminder.id !== id)
-    )
+  
+  // 3. HATIRLATICI SILME - DELETE API
+  async function handleDeleteReminder(id: number) {
+    setError('')
+
+    try {
+      const response = await fetch(
+        `http://localhost:5127/api/reminders/${id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${_props.accessToken}`
+          }
+        }
+      )
+
+      if (response.status === 401) {
+        _props.onUnauthorized()
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error('Silme işlemi başarısız.')
+      }
+
+      setReminders(previous =>
+        previous.filter(reminder => reminder.id !== id)
+      )
+
+    } catch {
+      setError('Hatırlatıcı silinemedi. Tekrar dene.')
+    }
   }
+
 
   // HATIRLATICI DURUMUNU HESAPLA
   function getReminderStatus(reminder: Reminder): string {
@@ -100,7 +247,7 @@ const [filter, setFilter] = useState<
     }
 
     const reminderTime = new Date(reminder.dateTime).getTime()
-    const remainingTime = reminderTime - Date.now()
+    const remainingTime = reminderTime - now
 
     // Tarih geçtiyse
     if (remainingTime < 0) {
@@ -123,7 +270,21 @@ const [filter, setFilter] = useState<
   )
 
   // HATIRLATICI İSTATİSTİKLERİ
-  const now = Date.now()
+ 
+  // Güncel zamanı takip et
+  const [now, setNow] = useState(() => Date.now())
+
+  // Her 30 saniyede zamanı güncelle
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNow(Date.now())
+    }, 30000)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [])
+
 
   const totalReminders = reminders.length
 
@@ -380,13 +541,15 @@ if (
 
 <p
   className={`reminder-status ${
-    reminder.completed
-      ? 'completed'
-      : new Date(reminder.dateTime).getTime() < Date.now()
-        ? 'overdue'
-        : new Date(reminder.dateTime).getTime() - Date.now() <= 86400000
-          ? 'soon'
-          : 'waiting'
+    
+reminder.completed
+  ? 'completed'
+  : new Date(reminder.dateTime).getTime() < now
+    ? 'overdue'
+    : new Date(reminder.dateTime).getTime() - now <= 86400000
+      ? 'soon'
+      : 'waiting'
+
   }`}
 >
   Durum: {getReminderStatus(reminder)}

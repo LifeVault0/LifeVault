@@ -439,7 +439,12 @@ useState<'notes' | 'documents' | 'reminders' | 'ai'>('notes')
 
 ) : activePage === 'reminders' ? (
 
-  <Reminders />
+ 
+<Reminders
+  accessToken={accessToken}
+  onUnauthorized={handleUnauthorized}
+/>
+
 
 ) : activePage === 'ai' ? (
 
