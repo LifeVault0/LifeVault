@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react'
 // Sohbet mesajlarının veri yapısı
 interface ChatMessage {
   id: string
-  role: 'user'
+  role: 'user' | 'assistant'
   content: string
 }
 
@@ -118,16 +118,20 @@ function AIAssistant() {
 
             messages.map(message => (
 
-              <div
-                key={message.id}
-                className="ai-message user"
-              >
+             
+<div
+  key={message.id}
+  className={`ai-message ${message.role}`}
+>
+  <strong>
+    {message.role === 'user'
+      ? '👤 Sen'
+      : '🤖 AI Asistan'}
+  </strong>
 
-                <strong>👤 Sen</strong>
+  <p>{message.content}</p>
+</div>
 
-                <p>{message.content}</p>
-
-              </div>
 
             ))
 
