@@ -36,7 +36,7 @@ function App() {
 
   // Aktif sayfa
   const [activePage, setActivePage] =
-    
+
 useState<'notes' | 'documents' | 'reminders' | 'ai'>('notes')
 
 
@@ -381,7 +381,7 @@ useState<'notes' | 'documents' | 'reminders' | 'ai'>('notes')
             📁 Belgeler
           </button>
 
-          
+
 <button
   type="button"
   className={
@@ -428,7 +428,7 @@ useState<'notes' | 'documents' | 'reminders' | 'ai'>('notes')
       {/* ANA İÇERİK */}
       <main>
 
-  
+
 {activePage === 'documents' ? (
 
   <Documents
@@ -439,7 +439,7 @@ useState<'notes' | 'documents' | 'reminders' | 'ai'>('notes')
 
 ) : activePage === 'reminders' ? (
 
- 
+
 <Reminders
   accessToken={accessToken}
   onUnauthorized={handleUnauthorized}
@@ -447,8 +447,11 @@ useState<'notes' | 'documents' | 'reminders' | 'ai'>('notes')
 
 
 ) : activePage === 'ai' ? (
+<AIAssistant
+  accessToken={accessToken}
+  onUnauthorized={handleUnauthorized}
+/>
 
-  <AIAssistant />
 
 ) : (
 

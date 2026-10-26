@@ -8,7 +8,14 @@ interface ChatMessage {
   content: string
 }
 
-function AIAssistant() {
+
+interface AIAssistantProps {
+  accessToken: string
+  onUnauthorized: () => void
+}
+
+function AIAssistant(_props: AIAssistantProps) {
+
 
   // Sohbet mesajları
   const [messages, setMessages] =
@@ -18,32 +25,87 @@ function AIAssistant() {
   const [input, setInput] = useState('')
 
   // MESAJ EKLEME (DEMO)
-  function handleSendMessage(
+
+  // BELGELERDE ARAMA - GET API
+  async function handleSendMessage(
     event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault()
 
     const messageText = input.trim()
 
-    if (!messageText) {
-      return
-    }
+    if (!messageText) return
 
-    const newMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: messageText
+    if (messageText.length > 100) {
+      alert('Arama metni en fazla 100 karakter olabilir.')
+      return
     }
 
     setMessages(previous => [
       ...previous,
-      newMessage
+      {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: messageText
+      }
     ])
 
     setInput('')
+
+    try {
+      const response = await fetch(
+        `http://localhost:5127/api/documents/chunks/search?q=${encodeURIComponent(messageText)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${_props.accessToken}`
+          }
+        }
+      )
+
+      if (response.status === 401) {
+        _props.onUnauthorized()
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error('Belge arama başarısız.')
+      }
+
+      const data: {
+        count: number
+        results: {
+          documentName: string
+          content: string
+        }[]
+      } = await response.json()
+
+      const answer = data.count === 0
+        ? 'Belgelerinde bu ifadeyle eşleşen bir metin bulunamadı.'
+        : data.results.slice(0, 3).map(result =>
+            `📄 ${result.documentName}: ${result.content.slice(0, 300)}`
+          ).join('\n\n')
+
+      setMessages(previous => [
+        ...previous,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: answer
+        }
+      ])
+
+    } catch {
+      setMessages(previous => [
+        ...previous,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: 'Belgelerde arama yapılamadı. Backend bağlantısını kontrol et.'
+        }
+      ])
+    }
   }
 
-  // SOHBETİ TEMİZLE
   function handleClearChat() {
     setMessages([])
     setInput('')
@@ -67,13 +129,12 @@ function AIAssistant() {
           Merhaba! LifeVault AI Asistan
           arayüzüne hoş geldin.
         </p>
+<p>
+  Belgelerinde kelime veya ifade arayabilirsin.
+  LifeVault, yüklediğin belgelerde eşleşen
+  metinleri bulup burada gösterecek.
+</p>
 
-        <p>
-          Şu anda demo modundayım.
-          Henüz yapay zekâ backend bağlantım yok.
-          Yazdığın mesajları bu ekranda
-          görüntüleyebilirsin.
-        </p>
       </div>
 
       {/* SOHBET ALANI */}
@@ -118,7 +179,7 @@ function AIAssistant() {
 
             messages.map(message => (
 
-             
+
 <div
   key={message.id}
   className={`ai-message ${message.role}`}
@@ -163,7 +224,7 @@ function AIAssistant() {
             type="submit"
             disabled={!input.trim()}
           >
-            ➤ Mesajı Ekle (Demo)
+           🔍 Belgelerimde Ara
           </button>
 
         </form>
